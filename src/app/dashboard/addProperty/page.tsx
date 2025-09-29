@@ -29,8 +29,9 @@ import {
 import LocationN from '@/components/locationN';
 import { GrClosedCaption } from 'react-icons/gr';
 import { uploadToS3, uploadVideoToS3 } from '@/components/uploadImageS3';
-import { aiDescription, createProperty, getAllCategories, getFirstUser } from '@/actions/actions';
+import { aiDescription, createProperty, getAllCategories, getFirstUser, updateProperty } from '@/actions/actions';
 import { useSelector } from 'react-redux';
+import { useSearchParams, useRouter } from 'next/navigation';
 
 interface IFormInput {
   title: string;
@@ -85,6 +86,10 @@ export default function Page() {
   const [cityAddress, setCityAddress] = useState({ longitude: 11.502612977652129, latitude: 3.847739697100343 })
   const [selectedImages, setSelectedImages] = useState([]);
   const [selectedCategory, setSelectedCategory] = useState<'hospital' | 'school' | 'market'>('hospital');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingPropertyId, setEditingPropertyId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { control, register, handleSubmit, watch, reset, setValue, formState: { errors, isValid }, } = useForm<IFormInput>({
     mode: 'onChange',
     defaultValues: {
@@ -124,11 +129,51 @@ export default function Page() {
     const fetchCategoriesAndSection = async () => {
       setCategories(await getAllCategories());
       setUser(users);
-      setValue("userId", users?.id)    
-
+      setValue("userId", users?.id);
+      
+      // Check if we're in edit mode
+      const editId = searchParams.get('edit');
+      if (editId && users?.properties) {
+        const propertyToEdit = users.properties.find((p: any) => p.id === editId);
+        if (propertyToEdit) {
+          setIsEditMode(true);
+          setEditingPropertyId(editId);
+          setShowSecondSection(true);
+          
+          // Populate form with existing data
+          setValue('title', propertyToEdit.title);
+          setValue('categoryId', propertyToEdit.categoryId);
+          setValue('price', propertyToEdit.price);
+          setValue('description', propertyToEdit.description);
+          setValue('bedrooms', propertyToEdit.bedrooms);
+          setValue('bathrooms', propertyToEdit.bathrooms);
+          setValue('kitchen', propertyToEdit.kitchen);
+          setValue('propertyNumber', propertyToEdit.propertyNumber);
+          setValue('water', propertyToEdit.water);
+          setValue('electricity', propertyToEdit.electricity);
+          setValue('hasStorage', propertyToEdit.hasStorage);
+          setValue('address', propertyToEdit.address);
+          setValue('lat', propertyToEdit.lat);
+          setValue('lng', propertyToEdit.lng);
+          setValue('gate', propertyToEdit.gate);
+          setValue('gateman', propertyToEdit.gateman);
+          setValue('hospital', propertyToEdit.hospital || []);
+          setValue('school', propertyToEdit.school || []);
+          setValue('market', propertyToEdit.market || []);
+          
+          if (propertyToEdit.lat && propertyToEdit.lng) {
+            setClickedLocation({ latitude: propertyToEdit.lat, longitude: propertyToEdit.lng });
+            setCityAddress({ latitude: propertyToEdit.lat, longitude: propertyToEdit.lng });
+          }
+          
+          if (propertyToEdit.images && propertyToEdit.images.length > 0) {
+            setSelectedImages(propertyToEdit.images);
+          }
+        }
+      }
     };
     fetchCategoriesAndSection();
-  }, [users]);
+  }, [users, searchParams, setValue]);
 
   useEffect(() => {
     if (clickedLocation.latitude !== null && clickedLocation.longitude !== null) {
@@ -156,6 +201,11 @@ export default function Page() {
   const onSubmitt = async (data: IFormInput) => {
     const { title, color, mainCarrefour, distanceFromRoad } = data;
   
+    if (!color || !mainCarrefour || !distanceFromRoad) {
+      toast.error('Please fill in all required fields.');
+      return;
+    }
+  
     const newProperty = {
       title,
       color,
@@ -163,23 +213,19 @@ export default function Page() {
       distanceFromRoad,
     };
   
-    setLoading(true); // Start loading
+    setLoading(true);
   
     try {
-      const aiResult = await aiDescription(newProperty); // Get the AI-generated description
-  
-      const parsedData = {
-        result: JSON.parse(aiResult.result)
-      };
-
-      setValue('description', parsedData.result.description); 
-  
+      const aiResult = await aiDescription(newProperty);
+      setValue('description', aiResult.result);
       setIsDialogOpen(false);
       setValue('color', '');
       setValue('mainCarrefour', '');
-      setValue('distanceFromRoad', null);
+      setValue('distanceFromRoad', 0);
+      toast.success('AI description generated successfully!');
     } catch (error) {
-      console.error('Error submitting form:', error);
+      console.error('Error generating AI description:', error);
+      toast.error('Failed to generate AI description. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -251,11 +297,17 @@ export default function Page() {
       let imageUrls: string[] = [];
       let videoUrl: string | null = null;
 
-      // Upload the video to S3 and get the URL
-
-      // Upload the images to S3 and get the URLs
+      // Handle images - only upload new ones if they're File objects
       if (data.images && data.images.length > 0) {
-        imageUrls = await uploadToS3(data.images);
+        const newImages = Array.from(data.images).filter(img => img instanceof File);
+        if (newImages.length > 0) {
+          imageUrls = await uploadToS3(newImages);
+        } else {
+          // Use existing images if no new ones uploaded
+          imageUrls = selectedImages.filter(img => typeof img === 'string');
+        }
+      } else if (selectedImages.length > 0) {
+        imageUrls = selectedImages.filter(img => typeof img === 'string');
       }
 
       if (data.video) {
@@ -290,17 +342,23 @@ export default function Page() {
         })),
       };
 
-      await createProperty(formDat);
-      toast.success("The site was created successfully.")
+      if (isEditMode && editingPropertyId) {
+        await updateProperty(editingPropertyId, formDat);
+        toast.success("Property updated successfully.");
+      } else {
+        await createProperty(formDat);
+        toast.success("Property created successfully.");
+      }
+      
       reset();
-      window.location.reload();
+      router.push('/dashboard');
 
     } catch (error) {
       console.error('Error submitting form:', error);
-      toast.error("An error occurred while creating the site.")
+      toast.error(isEditMode ? "Failed to update property." : "Failed to create property.");
     } finally {
       setIsSubmitting(false);
-        }
+    }
   };
 
   const handleContinue = () => {
@@ -346,7 +404,7 @@ export default function Page() {
   return (
     <section className=' w-[100%] mt-[7.5rem] sm:mt-[5rem] bg-secondaryColor   md-[1000px]:w-[80%]  lg:max-w-[90%]  p-4   sm:p-8  float-right'>
       <div >
-        <h3 className='text-3xl mb-8'>Submit Property</h3>
+        <h3 className='text-3xl mb-8'>{isEditMode ? 'Edit Property' : 'Submit Property'}</h3>
         <form onSubmit={handleSubmit(onSubmit)} className='space-y-8 bg-white p-4 md:p-8 rounded-lg shadow-md'>
           <h2 className='text-xl font-semibold'>Basic Information</h2>
           <hr />
@@ -595,8 +653,15 @@ export default function Page() {
                       </div>
                     </div>
                     <DialogFooter>
-                    <Button type="submit" className="bg-primaryColor text-white" onClick={handleSubmit(onSubmitt)} disabled={!isValid}>
-            {loading ? 'Submitting...' : 'Submit'}
+                    <Button type="button" className="bg-primaryColor text-white" onClick={handleSubmit(onSubmitt)} disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              'Generate Description'
+            )}
           </Button>
 
                     </DialogFooter>
@@ -775,7 +840,7 @@ export default function Page() {
                                     Please wait
                                 </>
                             ):  (
-                              'Submit Property'
+                              isEditMode ? 'Update Property' : 'Submit Property'
                           )}
               </Button>
             </>
