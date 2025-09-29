@@ -96,7 +96,7 @@ export default function Page() {
                   <p className="absolute bottom-3 right-3 p-2 text-white text-2xl"><StarIcon /></p>
                 </div>
                 <div className="flex w-full flex-col gap-2 items-center justify-center">
-                  <div className="flex flex-col p-2 gap-1 w-full ">
+                  <div className="flex flex-col p-2 gap-1 w-full "   onClick={() => window.location.href = `/${category}/${property.id}`}>
                   <Link href={`/${category}/${property.id}`} className="font-comfortaa text-customBlack hover:text-primaryColor cursor-pointer hover:transition-colors hover:duration-300 transition-colors duration-300 text-2xl md:text-3xl">{property.title.charAt(0).toUpperCase() + property.title.slice(1)}</Link>
                   <div className="flex gap-2 items-center">
                       <MapPin className="text-primaryColor w-4 h-4" />
