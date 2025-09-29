@@ -1,10 +1,14 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Loader2 } from "lucide-react"; // You can replace this with your preferred loading spinner
+import { Loader2 } from "lucide-react";
+import { deleteProperty, getFirstUser } from "@/actions/actions";
+import { addUser } from "../../globalRedux/property/propertySlice";
 
 const PropertyList: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(true); // Add loading state
+  const dispatch = useDispatch();
+  const [isLoading, setIsLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const user = useSelector((state: any) => state.property.user);
   const properties = user?.properties?.filter(
     (property: any) => property.category.name === "studio"
@@ -12,9 +16,36 @@ const PropertyList: React.FC = () => {
 
   useEffect(() => {
     if (user?.properties) {
-      setIsLoading(false); // Once properties are loaded, set loading to false
+      setIsLoading(false);
     }
   }, [user]);
+
+  const handleEdit = (propertyId: string) => {
+    window.location.href = `/dashboard/addProperty?edit=${propertyId}`;
+  };
+
+  const handleDelete = async (propertyId: string) => {
+    if (!confirm("Are you sure you want to delete this property?")) {
+      return;
+    }
+
+    setDeletingId(propertyId);
+    try {
+      await deleteProperty(propertyId);
+      // Update Redux state by removing the deleted property
+      const updatedUser = {
+        ...user,
+        properties: user.properties.filter((property: any) => property.id !== propertyId)
+      };
+      dispatch(addUser(updatedUser));
+      alert("Property deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting property:", error);
+      alert("Failed to delete property. Please try again.");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   return (
     <section className="w-[100%] mt-[7.5rem] sm:mt-[5rem] md-[1000px]:w-[80%] lg:max-w-[90%] p-4 sm:p-8 float-right">
@@ -67,11 +98,18 @@ const PropertyList: React.FC = () => {
                     <td className="py-4 px-6 text-gray-600">0 Comments</td>
                     <td className="py-4 px-6">
                       <div className="flex space-x-2">
-                        <button className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600">
+                        <button
+                          onClick={() => handleEdit(property.id)}
+                          className="bg-green-500 text-white py-2 px-4 rounded hover:bg-green-600"
+                        >
                           Edit
                         </button>
-                        <button className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600">
-                          Delete
+                        <button
+                          onClick={() => handleDelete(property.id)}
+                          disabled={deletingId === property.id}
+                          className="bg-red-500 text-white py-2 px-4 rounded hover:bg-red-600 disabled:opacity-50"
+                        >
+                          {deletingId === property.id ? "Deleting..." : "Delete"}
                         </button>
                       </div>
                     </td>
