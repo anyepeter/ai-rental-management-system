@@ -63,7 +63,7 @@ export default () => {
 
 
     const handleDashboardClick = () => {
-        if (user?.id === 'user_2lbYGMvlajh6IOEww2em1vbeLOP' || user?.id === 'user_2tz4s8D9BI8KpTonvoL7LXwVSXe') {
+        if (user?.id === 'user_2lbYGMvlajh6IOEww2em1vbeLOP') {
             router.push('/admin')
         } else {
             router.push('/dashboard')
